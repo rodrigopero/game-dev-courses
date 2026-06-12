@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Correlativas · Tecnicatura en Videojuegos UTN</title>
+<style>
+  :root{
+    --bg: #101418;
+    --surface: #161b21;
+    --line: #262d36;
+    --text: #d7dde4;
+    --muted: #707a87;
+    --teal: #35b5c2;
+    --amber: #d9a73e;
+    --green: #54bd76;
+    --node-w: 210px;
+    font-size: 15px;
+  }
+  *{ box-sizing: border-box; margin: 0; padding: 0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  .mono{ font-family: ui-monospace, Consolas, monospace; }
+
+  header{
+    padding: 26px 32px 16px;
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 14px;
+  }
+  header h1{ font-size: 1.05rem; font-weight: 600; letter-spacing: .01em; }
+  header h1 span{ color: var(--muted); font-weight: 400; }
+
+  .hud{ display: flex; gap: 18px; align-items: center; font-size: .8rem; color: var(--muted); }
+  .hud b{ font-weight: 600; }
+  .hud .ap b{ color: var(--green); } .hud .cu b{ color: var(--amber); } .hud .di b{ color: var(--teal); }
+  .bar{ width: 120px; height: 3px; background: var(--line); border-radius: 99px; overflow: hidden; display: flex; }
+  .bar i{ display: block; height: 100%; transition: width .3s ease; }
+  .bar .b-ap{ background: var(--green); } .bar .b-cu{ background: var(--amber); }
+  button.reset{
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: .8rem; text-decoration: underline; text-underline-offset: 3px;
+  }
+  button.reset:hover{ color: var(--text); }
+
+  .legend{
+    display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 0 32px 14px;
+    color: var(--muted); font-size: .74rem; align-items: center;
+  }
+  .legend .key{ display: flex; align-items: center; gap: 6px; }
+  .dot{ width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line); }
+  .dot.di{ border-color: var(--teal); }
+  .dot.cu{ border-color: var(--amber); background: var(--amber); }
+  .dot.ap{ border-color: var(--green); background: var(--green); }
+  .ln{ width: 22px; border-top: 1.5px solid var(--muted); }
+  .ln.dash{ border-top-style: dashed; }
+
+  .board-scroll{ overflow-x: auto; padding: 12px 32px 46px; }
+  .board{
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, var(--node-w));
+    gap: 0 100px;
+    width: max-content;
+    margin: 0 auto;
+  }
+  svg#edges{ position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  svg#edges path.vis{ fill: none; stroke-width: 1.5; transition: stroke .2s, opacity .2s; }
+  svg#edges path.hit{ fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: help; }
+
+  .col{ display: flex; flex-direction: column; gap: 22px; position: relative; z-index: 1; }
+  .col h2{
+    font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+    font-weight: 600; padding-bottom: 4px;
+  }
+
+  .node{
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, opacity .15s;
+  }
+  .node .num{ color: var(--muted); font-size: .65rem; }
+  .node .nom{ font-size: .82rem; font-weight: 500; line-height: 1.3; margin-top: 2px; }
+  .node .estado{ margin-top: 5px; font-size: .65rem; letter-spacing: .06em; color: var(--muted); }
+
+  .node.bloqueada{ opacity: .38; cursor: not-allowed; }
+  .node.disponible{ border-color: var(--teal); }
+  .node.disponible .estado{ color: var(--teal); }
+  .node.cursada{ border-color: var(--amber); }
+  .node.cursada .estado{ color: var(--amber); }
+  .node.aprobada{ border-color: var(--green); }
+  .node.aprobada .estado{ color: var(--green); }
+  .node:not(.bloqueada):hover{ border-color: var(--text); }
+
+  .node.gate{
+    background: transparent; border-style: dashed; cursor: default; text-align: center; padding: 8px 12px;
+  }
+  .node.gate .nom{ font-size: .7rem; color: var(--muted); font-weight: 500; margin-top: 0; }
+  .node.gate.ok{ border-color: var(--teal); }
+  .node.gate.ok .nom{ color: var(--teal); }
+
+  .board.focus .node{ opacity: .22; }
+  .board.focus .node.rel{ opacity: 1; }
+  .board.focus svg#edges path.vis{ opacity: .06; }
+  .board.focus svg#edges path.vis.rel{ opacity: 1; }
+
+  /* tooltip de aristas */
+  #tip{
+    position: fixed; z-index: 10; pointer-events: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; font-size: .72rem; color: var(--text);
+    display: none; max-width: 280px; line-height: 1.45;
+    box-shadow: 0 4px 14px #0008;
+  }
+  #tip small{ color: var(--muted); display: block; }
+
+  footer{
+    color: var(--muted); font-size: .72rem; padding: 0 32px 36px;
+    max-width: 900px; margin: 0 auto; line-height: 1.6; text-align: center;
+  }
+
+  @media (max-width: 700px){
+    header, .legend, .board-scroll{ padding-left: 16px; padding-right: 16px; }
+    :root{ --node-w: 180px; }
+    .board{ gap: 0 64px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Correlativas <span>· Tec. en Desarrollo y Producción de Videojuegos (UTN)</span></h1>
+  <div class="hud">
+    <span class="ap"><b id="st-ap">0</b> aprobadas</span>
+    <span class="cu"><b id="st-cu">0</b> cursadas</span>
+    <span class="di"><b id="st-di">0</b> disponibles</span>
+    <div class="bar"><i class="b-ap" id="bar-ap"></i><i class="b-cu" id="bar-cu"></i></div>
+    <button class="reset" id="btn-reset">Reiniciar</button>
+  </div>
+</header>
+
+<div class="legend">
+  <span class="key"><span class="dot"></span> Bloqueada</span>
+  <span class="key"><span class="dot di"></span> Disponible</span>
+  <span class="key"><span class="dot cu"></span> Cursada</span>
+  <span class="key"><span class="dot ap"></span> Aprobada</span>
+  <span class="key"><span class="ln dash"></span> Requiere cursada</span>
+  <span class="key"><span class="ln"></span> Requiere aprobada</span>
+</div>
+
+<div class="board-scroll">
+  <div class="board" id="board">
+    <svg id="edges"></svg>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<footer>
+  Clic en una materia para ciclar pendiente → cursada → aprobada. Hover sobre una materia resalta sus correlativas;
+  hover sobre una línea muestra el tipo de requisito. Las electivas dependen del nodo punteado "Materias 1–14 cursadas".
+</footer>
+
+<script>
+(function(){
+  const MATERIAS = [
+    { id:1,  nom:"Programación de Videojuegos 1", col:0 },
+    { id:2,  nom:"Probabilidad",                  col:0 },
+    { id:3,  nom:"Diseño de Juegos",              col:0 },
+    { id:4,  nom:"Arte 2D",                       col:0 },
+    { id:5,  nom:"Inglés",                        col:0 },
+    { id:6,  nom:"Programación de Videojuegos 2", col:1, cursada:[1] },
+    { id:7,  nom:"Game Design",                   col:1, cursada:[3] },
+    { id:8,  nom:"Motores de Desarrollo I",       col:1, cursada:[1] },
+    { id:9,  nom:"Audio Interactivo",             col:1 },
+    { id:10, nom:"Motores de Desarrollo II",      col:2, cursada:[6,8], aprobada:[1] },
+    { id:11, nom:"Arte 3D",                       col:2, aprobada:[4] },
+    { id:12, nom:"Technical Art",                 col:2, cursada:[8] },
+    { id:13, nom:"Narrativa",                     col:2 },
+    { id:14, nom:"Estructura de Datos",           col:2, aprobada:[1,6] },
+    { id:15, nom:"Producción de Videojuegos I",   col:3, cursada:[10], aprobada:[8] },
+    { id:16, nom:"Electiva 1",                    col:3, gate:true },
+    { id:17, nom:"Electiva 2",                    col:3, gate:true },
+    { id:18, nom:"Electiva 3",                    col:3, gate:true },
+    { id:19, nom:"Práctica Supervisada",          col:3, aprobada:[1,6,7,8,10,12] },
+  ];
+  const COLS = ["1° año · 1er cuat.", "1° año · 2do cuat.", "2° año · 1er cuat.", "2° año · 2do cuat."];
+  const GATE_IDS = Array.from({length:14}, (_,i)=>i+1);
+  const TXT = ["Pendiente", "Cursada", "Aprobada"];
+  const NOMBRES = {}; MATERIAS.forEach(m => NOMBRES[m.id] = m.nom);
+  NOMBRES["gate"] = "Materias 1–14 cursadas";
+
+  const STORAGE_KEY = "correlativas-utn-videojuegos";
+  const estado = {};
+  MATERIAS.forEach(m => estado[m.id] = 0);
+
+  // Persistencia en el navegador (try/catch: si el storage no está disponible, funciona solo en memoria)
+  function guardar(){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(estado)); } catch (e) {}
+  }
+  function cargar(){
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      MATERIAS.forEach(m => {
+        const v = data[m.id];
+        if (v === 1 || v === 2) estado[m.id] = v;
+      });
+    } catch (e) {}
+  }
+  cargar();
+
+  const board = document.getElementById("board");
+  const svg = document.getElementById("edges");
+  const tip = document.getElementById("tip");
+  const nodos = {};
+
+  const colEls = COLS.map(t => {
+    const c = document.createElement("div");
+    c.className = "col";
+    c.innerHTML = '<h2>' + t + '</h2>';
+    board.appendChild(c);
+    return c;
+  });
+
+  MATERIAS.forEach(m => {
+    if (m.id === 16){
+      const g = document.createElement("div");
+      g.className = "node gate";
+      g.innerHTML = '<div class="nom">Materias 1–14 cursadas</div>';
+      colEls[3].appendChild(g);
+      nodos["gate"] = g;
+    }
+    const el = document.createElement("div");
+    el.className = "node";
+    el.innerHTML =
+      '<div class="num mono">' + m.id + '</div>' +
+      '<div class="nom">' + m.nom + '</div>' +
+      '<div class="estado">Pendiente</div>';
+    colEls[m.col].appendChild(el);
+    nodos[m.id] = el;
+
+    el.addEventListener("click", () => {
+      if (el.classList.contains("bloqueada")) return;
+      estado[m.id] = (estado[m.id] + 1) % 3;
+      actualizar();
+    });
+    el.addEventListener("mouseenter", () => enfocar(m));
+    el.addEventListener("mouseleave", desenfocar);
+  });
+
+  // ── Aristas: cada una con un path visible y un path invisible más ancho para el hover ──
+  const edges = [];
+  MATERIAS.forEach(m => {
+    (m.cursada  || []).forEach(p => edges.push({ de:p, a:m.id, tipo:"cursada"  }));
+    (m.aprobada || []).forEach(p => edges.push({ de:p, a:m.id, tipo:"aprobada" }));
+    if (m.gate) edges.push({ de:"gate", a:m.id, tipo:"cursada" });
+  });
+
+  const NS = "http://www.w3.org/2000/svg";
+  edges.forEach(e => {
+    const vis = document.createElementNS(NS, "path");
+    vis.setAttribute("class", "vis");
+    if (e.tipo === "cursada") vis.setAttribute("stroke-dasharray", "5 5");
+    const hit = document.createElementNS(NS, "path");
+    hit.setAttribute("class", "hit");
+    svg.appendChild(vis);
+    svg.appendChild(hit);
+    e.vis = vis; e.hit = hit;
+
+    hit.addEventListener("mousemove", ev => {
+      const cumplida = e.tipo === "cursada" ? estado[e.de] >= 1 || e.de === "gate" && gateOk() : estado[e.de] === 2;
+      tip.innerHTML =
+        '<b>' + (e.tipo === "cursada" ? "Requiere cursada" : "Requiere aprobada") + '</b>' +
+        '<small>' + NOMBRES[e.de] + ' → ' + NOMBRES[e.a] + '</small>';
+      tip.style.display = "block";
+      tip.style.left = (ev.clientX + 14) + "px";
+      tip.style.top  = (ev.clientY + 14) + "px";
+      e.vis.style.strokeWidth = "2.5";
+    });
+    hit.addEventListener("mouseleave", () => {
+      tip.style.display = "none";
+      e.vis.style.strokeWidth = "";
+    });
+  });
+
+  function trazar(){
+    const br = board.getBoundingClientRect();
+    edges.forEach(e => {
+      const a = nodos[e.de].getBoundingClientRect();
+      const b = nodos[e.a].getBoundingClientRect();
+      const x1 = a.right - br.left, y1 = a.top + a.height/2 - br.top;
+      const x2 = b.left  - br.left, y2 = b.top + b.height/2 - br.top;
+      const dx = Math.max(40, (x2 - x1) * 0.5);
+      const d = 'M ' + x1 + ' ' + y1 + ' C ' + (x1+dx) + ' ' + y1 + ', ' + (x2-dx) + ' ' + y2 + ', ' + x2 + ' ' + y2;
+      e.vis.setAttribute("d", d);
+      e.hit.setAttribute("d", d);
+    });
+  }
+
+  function gateOk(){ return GATE_IDS.every(p => estado[p] >= 1); }
+
+  function prereqsOk(m){
+    const cu = (m.cursada  || []).every(p => estado[p] >= 1);
+    const ap = (m.aprobada || []).every(p => estado[p] === 2);
+    return cu && ap && (!m.gate || gateOk());
+  }
+
+  function actualizar(){
+    let nAp = 0, nCu = 0, nDi = 0;
+    nodos["gate"].classList.toggle("ok", gateOk());
+
+    MATERIAS.forEach(m => {
+      const el = nodos[m.id];
+      const ok = prereqsOk(m);
+      if (!ok && estado[m.id] > 0) estado[m.id] = 0;
+
+      el.classList.remove("bloqueada","disponible","cursada","aprobada");
+      if (estado[m.id] === 2){ el.classList.add("aprobada"); nAp++; }
+      else if (estado[m.id] === 1){ el.classList.add("cursada"); nCu++; }
+      else if (ok){ el.classList.add("disponible"); nDi++; }
+      else el.classList.add("bloqueada");
+      el.querySelector(".estado").textContent =
+        estado[m.id] > 0 ? TXT[estado[m.id]] : (ok ? "Disponible" : "Bloqueada");
+    });
+
+    edges.forEach(e => {
+      let ok;
+      if (e.de === "gate") ok = gateOk();
+      else ok = e.tipo === "cursada" ? estado[e.de] >= 1 : estado[e.de] === 2;
+      e.vis.setAttribute("stroke", ok ? "#54bd76" : "#3a4452");
+      e.vis.setAttribute("opacity", ok ? "0.8" : "0.5");
+    });
+
+    document.getElementById("st-ap").textContent = nAp;
+    document.getElementById("st-cu").textContent = nCu;
+    document.getElementById("st-di").textContent = nDi;
+    document.getElementById("bar-ap").style.width = (nAp/19*100) + "%";
+    document.getElementById("bar-cu").style.width = (nCu/19*100) + "%";
+    guardar();
+  }
+
+  function enfocar(m){
+    board.classList.add("focus");
+    const rel = new Set([String(m.id)]);
+    edges.forEach(e => {
+      if (e.a === m.id || e.de === m.id){
+        e.vis.classList.add("rel");
+        rel.add(String(e.de)); rel.add(String(e.a));
+      }
+    });
+    if (m.gate) GATE_IDS.forEach(p => rel.add(String(p)));
+    rel.forEach(id => nodos[id] && nodos[id].classList.add("rel"));
+  }
+  function desenfocar(){
+    board.classList.remove("focus");
+    document.querySelectorAll(".node.rel").forEach(n => n.classList.remove("rel"));
+    edges.forEach(e => e.vis.classList.remove("rel"));
+  }
+
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    MATERIAS.forEach(m => estado[m.id] = 0);
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    actualizar();
+  });
+
+  window.addEventListener("resize", trazar);
+  actualizar();
+  trazar();
+  requestAnimationFrame(trazar);
+  setTimeout(trazar, 300);
+})();
+</script>
+</body>
+</html>
